@@ -1,3 +1,4 @@
-.haxelib/
-.haxelsp/recording/
-dump/
+node_modules
+data.json
+shelter_data.json
+shelter_annuary.json

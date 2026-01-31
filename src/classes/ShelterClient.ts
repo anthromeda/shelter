@@ -6,20 +6,11 @@ import path from "path";
 import { udpSocket, type udp } from "bun";
 import EventEmitter from "events";
 import Logger from "./Logger";
+import { ShelterPacketType } from "./ShelterPacketType";
+import type { ShelterClientOptions } from "./ShelterClientOptions";
+import { ShelterUtils } from "./ShelterUtils";
 
 // ShelterClient is both a client and a server
-enum ShelterPacketType {
-  ANNOUNCE = 0x01,
-  MESSAGE = 0x02,
-  SEEK = 0x03,
-  SEEK_BACK = 0x04,
-}
-
-interface ShelterClientOptions {
-  datafilePath?: string;
-  annuaryPath?: string;
-  debug?: boolean;
-}
 
 export default class ShelterClient extends EventEmitter.EventEmitter {
   private socket!: udp.Socket<"uint8array">;
@@ -144,7 +135,7 @@ export default class ShelterClient extends EventEmitter.EventEmitter {
     hashTarget: boolean = true,
   ): Uint8Array {
     const myData = this.data.get();
-    const myPubKey = ShelterClient.toUint8(myData.publicKey);
+    const myPubKey = ShelterUtils.toUint8(myData.publicKey);
     const sID = blake3(myPubKey);
 
     if (type === ShelterPacketType.ANNOUNCE) {
@@ -247,7 +238,7 @@ export default class ShelterClient extends EventEmitter.EventEmitter {
       if (data[4] !== ShelterPacketType.SEEK) return;
 
       const targetIdHash = data.slice(37, 69);
-      const myPubKey = ShelterClient.toUint8(this.data.get().publicKey);
+      const myPubKey = ShelterUtils.toUint8(this.data.get().publicKey);
       const myIdHash = blake3(myPubKey);
 
       if (Buffer.from(targetIdHash).equals(Buffer.from(myIdHash))) {
@@ -302,7 +293,7 @@ export default class ShelterClient extends EventEmitter.EventEmitter {
         const sidHex = Buffer.from(targetIdHash).toString("hex");
 
         // On récupère la vraie clé publique dans l'annuaire
-        const targetPubKey = ShelterClient.toUint8(annuary[sidHex].publicKey);
+        const targetPubKey = ShelterUtils.toUint8(annuary[sidHex].publicKey);
 
         const packet = this.build(
           ShelterPacketType.MESSAGE,
@@ -326,7 +317,7 @@ export default class ShelterClient extends EventEmitter.EventEmitter {
         if (data[4] !== ShelterPacketType.SEEK_BACK) return;
 
         const targetIdHash = data.slice(37, 69);
-        const myPubKey = ShelterClient.toUint8(this.data.get().publicKey);
+        const myPubKey = ShelterUtils.toUint8(this.data.get().publicKey);
         const myIdHash = blake3(myPubKey);
 
         if (Buffer.from(targetIdHash).equals(Buffer.from(myIdHash))) {
@@ -374,10 +365,10 @@ export default class ShelterClient extends EventEmitter.EventEmitter {
       return null;
     }
 
-    const senderPubKey = ShelterClient.toUint8(senderPubKeyRaw);
+    const senderPubKey = ShelterUtils.toUint8(senderPubKeyRaw);
     const nonce = packet.slice(69, 93);
     const encryptedData = packet.slice(93);
-    const mySecretKey = ShelterClient.toUint8(this.data.get().secretKey);
+    const mySecretKey = ShelterUtils.toUint8(this.data.get().secretKey);
 
     // 2. Ouvrir la boîte
     const decrypted = nacl.box.open(

@@ -91,9 +91,11 @@ export default class ShelterClient extends EventEmitter.EventEmitter {
     this.on("message", (data: Uint8Array) => {
       if (data[4] === ShelterPacketType.MESSAGE) {
         const clearText = this.decrypt(data);
+        let senderPubKey = data.slice(37, 69); // PK is at offset 37, length 32
+
         if (clearText) {
           this.logger.log(`Received message : ${clearText}`);
-          this.emit("chat", clearText);
+          this.emit("chat", clearText, senderPubKey);
         }
       }
     });
@@ -109,23 +111,13 @@ export default class ShelterClient extends EventEmitter.EventEmitter {
     });
   }
 
-  encrypt(message: string, destPubKey: Uint8Array) {
-    // 1. Générer un nonce UNIQUE et ALÉATOIRE
+  encrypt(msgBytes: Uint8Array, destPubKey: Uint8Array) {
     const nonce = nacl.randomBytes(24);
-    const msgBytes = new TextEncoder().encode(message);
+    const mySecretKey = ShelterUtils.toUint8(this.data.get().secretKey); // Ensure this is Uint8Array
 
-    // 2. Chiffrer
-    const encrypted = nacl.box(
-      msgBytes,
-      nonce,
-      destPubKey, // La clé publique de celui qui va RECEVOIR
-      this.data.get().secretKey, // TA clé privée
-    );
+    const encrypted = nacl.box(msgBytes, nonce, destPubKey, mySecretKey);
 
     return { nonce, encrypted };
-
-    // Nonce is 24 bytes
-    // Encrypted message follows
   }
 
   build(
@@ -151,10 +143,7 @@ export default class ShelterClient extends EventEmitter.EventEmitter {
     }
 
     if (type === ShelterPacketType.MESSAGE && message && targetKey) {
-      const { encrypted, nonce } = this.encrypt(
-        Buffer.from(message).toString("utf-8"),
-        targetKey,
-      );
+      const { encrypted, nonce } = this.encrypt(message, targetKey);
       const dID = blake3(targetKey);
 
       // Magic(4) + Type(1) + sID(32) + dID(32) + Nonce(24) + Data(n)
@@ -192,13 +181,6 @@ export default class ShelterClient extends EventEmitter.EventEmitter {
       return packet;
     }
     throw new Error("Invalid packet build parameters");
-  }
-
-  static toUint8(data: any): Uint8Array {
-    if (data instanceof Uint8Array) return data;
-    if (typeof data === "string")
-      return new Uint8Array(data.split(",").map(Number));
-    return Uint8Array.from(Object.values(data));
   }
 
   async init() {
@@ -297,19 +279,29 @@ export default class ShelterClient extends EventEmitter.EventEmitter {
 
         const packet = this.build(
           ShelterPacketType.MESSAGE,
-          new TextEncoder().encode(message),
+          Uint8Array.from(new TextEncoder().encode(message)),
           targetPubKey,
-          false, // On ne re-hashe pas, build() s'en occupera
+          false,
         );
 
         this.socket.send(packet, port, address);
-        this.logger.log(`Encrypted message sent to ${address}`);
+        this.logger.log(
+          `Encrypted message sent to __redacted-ip__ (${Buffer.from(targetPubKey).toString("hex")})`,
+        );
+      },
+      onMessage: (cb: (msg: string, senderPubKey: Uint8Array) => void) => {
+        this.on("chat", (msg: string, senderPubKey: Uint8Array) => {
+          cb(msg, senderPubKey);
+        });
       },
     };
   }
 
   onHandshake(
-    cb: (r: ReturnType<typeof this.createConversation>) => void | Promise<void>,
+    cb: (
+      senderPubKey: Uint8Array,
+      accept: () => ReturnType<typeof this.createConversation>,
+    ) => void | Promise<void>,
   ) {
     this.on(
       "message",
@@ -328,13 +320,9 @@ export default class ShelterClient extends EventEmitter.EventEmitter {
             `Handshake received from __redacted-ip__ (${new TextDecoder("utf-8").decode(targetIdHash)}). You can now communicate.`,
           );
 
-          this.emit("handshake", {
-            address,
-            port,
-            senderIdHash,
-          });
-
-          await cb(this.createConversation(port, address, senderIdHash));
+          await cb(senderIdHash, () =>
+            this.createConversation(port, address, senderIdHash),
+          );
         }
       },
     );

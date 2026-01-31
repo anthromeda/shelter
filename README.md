@@ -31,6 +31,33 @@ sequenceDiagram
     Note right of B: Decrypts using NaCl.box
 ```
 
+# Try
+
+- Cloning the repo:
+
+```bash
+git clone https://github.com/anthromeda/shelter.git
+cd shelter
+```
+
+Install Bun (if not already installed):
+
+```bash
+curl -fsSL https://bun.sh/install | bash
+```
+
+- Install dependencies:
+
+```bash
+bun install
+```
+
+- Run the example app:
+
+```bash
+bun run ./app/main.ts
+```
+
 # Features
 
 - Secure by default: only the packet receiver can decrypt the data.

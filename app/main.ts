@@ -1,12 +1,10 @@
-debugger;
-
-import ShelterClient from "../src/classes/ShelterClient";
-import { ShelterUtils } from "../src/classes/ShelterUtils";
+import ShelterClient from "../src/ShelterClient";
+import { ShelterUtils } from "../src/ShelterUtils";
 import { TerminalUI } from "./TerminalUI";
 
 const activeConversations = new Set<any>();
 
-const client = new ShelterClient({ debug: true });
+const client = new ShelterClient();
 
 const ui = new TerminalUI((line) => {
   // This runs when you press Enter

@@ -1,10 +1,37 @@
-# Shelter
+![Shelter Logo](./docs/Shelter%20Github%20Banner.png)
 
-## Internet that feels like home.
+# Stacks
 
-A privacy-first, secure by design networking protocol built on top of UDP, using blake3 for hashing and sodium for encryption: the actual best modern cryptography available today.
+- Uses Blake3 for hashing (via @noble/hashes).
+- Uses nacl (TweetNaCl) for public-key cryptography.
+- Uses UDP sockets for networking (via Bun's udp sockets).
 
-## Features
+```mermaid
+sequenceDiagram
+    autonumber
+    participant A as Shelter Client (Alice)
+    participant N as Network (UDP Broadcast)
+    participant B as Shelter Client (Bob)
+
+    Note over A: Knows Bob's Public Key Hash
+    A->>N: SEEK (Type 0x03, targetIdHash)
+
+    Note over B: Receives Broadcast
+    B->>B: Compare targetIdHash with local ID
+
+    rect rgb(30, 30, 40)
+    Note right of B: Match Found
+    B->>A: SEEK_BACK (Type 0x04, targetIdHash) [Unicast]
+    end
+
+    Note over A: Receives SEEK_BACK
+    A->>A: Maps IP/Port to Bob's ID
+
+    A->>B: MESSAGE (Type 0x02, Encrypted Payload)
+    Note right of B: Decrypts using NaCl.box
+```
+
+# Features
 
 - Secure by default: only the packet receiver can decrypt the data.
 - Peer-to-peer: no central servers required.
@@ -12,18 +39,19 @@ A privacy-first, secure by design networking protocol built on top of UDP, using
 - High-level language bridges.
 - Support to co-exist with the existing internet infrastructure (HTTP/S, WebSockets, etc.).
 
-## The Promises
+# The Promises
 
 - **Shelter** isn't hosted, you host it.
 - **Shelter** isn't owned, you own it.
 - **Shelter** isn't monitored, you are private.
 - **Shelter** isn't centralized, you are in control.
 
-## Roadmap
+# Roadmap
 
-- [ ] Core Protocol Design
-- [ ] Working Networking Prototype (to send data between two peers or broadcast)
+- [x] Core Protocol Design
+- [x] Working Networking Prototype (to send data between two peers or broadcast)
 - [ ] Local Petname System
+- [ ] Translate code into Rust, Haxe or Zen-C (when possible)
 - [ ] Reporting Bad Actors
 - [ ] Profile System: a public key for each profile, but linked to the parent public key.
 - [ ] High-level Language Bridges (JavaScript, Python, Rust, Go, etc.)

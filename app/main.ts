@@ -23,8 +23,5 @@ client.onReady(() => {
   client.onHandshake(async (sender, accept) => {
     const conversation = accept();
     activeConversations.add(conversation);
-    ui.log(
-      `LOG: New handshake from ${Buffer.from(sender).toString("hex").substring(0, 8)}`,
-    );
   });
 });

@@ -32,7 +32,7 @@ client.on("ready", () => {
   });
 
   client.on("link", (sender, accept) => {
-    const conv = accept();
+    const conv = accept(); // Creates a conversation object
     ui.log(`LOG: Linked with ${sender}`);
     activeConversations.add(conv);
   });

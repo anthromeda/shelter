@@ -42,6 +42,8 @@ export default class ShelterClient extends EventEmitter.EventEmitter<ShelterClie
   constructor(options: ShelterClientOptions = {}) {
     super();
 
+    ShelterPacket.setMagic(this.intrinsic.MAGIC);
+
     this.datafilePath = options.datafilePath ?? this.datafilePath;
     this.annuaryPath = options.annuaryPath ?? this.annuaryPath;
 

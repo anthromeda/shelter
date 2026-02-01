@@ -1,5 +1,8 @@
 ![Shelter Logo](./docs/Shelter%20Github%20Banner.png)
 
+_Note : This project is in early development. Some API features can change before stable release.
+Also, the project is open to contributions and suggestions. Feel free to open issues or pull requests!_
+
 # Stacks
 
 - Uses Blake3 for hashing (via @noble/hashes).
@@ -86,3 +89,17 @@ bun run ./app/main.ts
 - [ ] Profile System: a public key for each profile, but linked to the parent public key.
 - [ ] High-level Language Bridges (JavaScript, Python, Rust, Go, etc.)
 - [ ] Documentation & Tutorials
+
+# Contributing
+
+We welcome contributions! Whether it's fixing bugs, adding documentation, or proposing new features.
+
+## How to Contribute
+
+1. **Fork the Repository**: standard GitHub workflow.
+2. **Create a Feature Branch**: git checkout -b feature/NewThing.
+3. **Code Guidelines**:
+   - Follow the existing code base.
+   - Add new tests for your feature in tests/.
+
+4. **Submit a Pull Request**: Describe your changes clearly.

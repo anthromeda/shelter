@@ -28,7 +28,7 @@ client.on("ready", () => {
   client.on("call", (sender, accept) => {
     ui.log(`Incoming call from ${sender}`);
     // Someones shouted a SEEK packet that targets us
-    accept();
+    accept(); // This sends a SEEK_BACK packet automatically
   });
 
   client.on("link", (sender, accept) => {

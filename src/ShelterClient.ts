@@ -157,9 +157,6 @@ export default class ShelterClient extends EventEmitter.EventEmitter<ShelterClie
 
       if (packet.getType() !== ShelterPacketType.SEEK) return;
 
-      // Sender's public key is hashed in the packet
-      const senderPublicKey = packet.getClearKey(this.getAllKnownIds());
-
       this.logger.log(`Received SEEK from ${packet.getSenderHex()}.`);
 
       if (Buffer.from(packet.getTarget()).equals(Buffer.from(this.hashKey))) {

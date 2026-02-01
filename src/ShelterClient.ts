@@ -9,15 +9,12 @@ import Logger from "./Logger";
 import { ShelterPacketType } from "./ShelterPacketType";
 import type { ShelterClientOptions } from "./ShelterClientOptions";
 import { ShelterUtils } from "./ShelterUtils";
+import ShelterClientEvents from "./ShelterClientEvents";
+import { ShelterConversation, ShelterData } from "./types";
 
 // ShelterClient is both a client and a server
 
-interface ShelterData {
-  publicKey: string; // hex
-  secretKey: string; // hex
-}
-
-export default class ShelterClient extends EventEmitter.EventEmitter {
+export default class ShelterClient extends EventEmitter.EventEmitter<ShelterClientEvents> {
   private socket!: udp.Socket<"uint8array">;
   private PORT: number = 4444;
 
@@ -31,7 +28,7 @@ export default class ShelterClient extends EventEmitter.EventEmitter {
     return this._intrinsic;
   }
 
-  public readonly data = {
+  private readonly data = {
     get: () => ShelterUtils.read<ShelterData>(this.datafilePath),
     set: (data: ShelterData) => {
       ShelterUtils.write<ShelterData>(this.datafilePath, data);
@@ -41,6 +38,8 @@ export default class ShelterClient extends EventEmitter.EventEmitter {
   private annuaryPath: string = path.join(cwd(), "shelter_annuary.json");
   private datafilePath: string = path.join(cwd(), "shelter_data.json");
 
+  private openConversations = new Set<ShelterConversation>();
+
   constructor(options: ShelterClientOptions = {}) {
     super();
 
@@ -49,125 +48,57 @@ export default class ShelterClient extends EventEmitter.EventEmitter {
 
     this.logger = new Logger(options.debug);
 
-    (async () => {
-      await this.init();
-    })();
+    this.init().then(() => {});
 
-    this.onReady(() => {
+    this.on("ready", () => {
       this.announce();
-
-      this.onAnnouncement(async (pubKey: Uint8Array) => {
-        let senderHex = ShelterUtils.toHex(pubKey);
-        this.logger.log(`Received announcement from ${senderHex}`);
-
-        // Save to annuary
-        let annuary = this.getAllKnownIds();
-
-        const idHex = ShelterUtils.toHex(blake3(pubKey));
-
-        // Stocke les deux !
-        annuary[idHex] = {
-          publicKey: ShelterUtils.toHex(pubKey),
-        };
-
-        ShelterUtils.write(this.annuaryPath, annuary);
-      });
+      this.listenForAnnouncements();
+      this.listenForMessages();
+      this.listenForSeekResponse();
+      this.listenForSeeks();
     });
+  }
 
+  get publicKey(): string {
+    return this.data.get()!.publicKey;
+  }
+
+  get secretKey(): string {
+    return this.data.get()!.secretKey;
+  }
+
+  private listenForMessages() {
     this.on("message", async (data: Uint8Array) => {
       let info = this.getInfoFromPacket(data);
+
       if (info.type === ShelterPacketType.MESSAGE) {
         const clearText = this.decrypt(data);
 
-        if (clearText) {
-          this.logger.log(`Received message : ${clearText}`);
-          this.emit("chat", clearText, info.senderPubKey);
-        }
+        if (!clearText) return;
+
+        this.logger.log(`Received message : ${clearText}`);
+        this.emit("text", info.senderPkHex, clearText);
       }
     });
   }
 
-  onAnnouncement(cb: (pubKey: Uint8Array) => Promise<void> | void) {
-    this.on(
-      "message",
-      async (data: Uint8Array, port: number, address: string) => {
-        let info = this.getInfoFromPacket(data);
-        if (info.type !== ShelterPacketType.ANNOUNCE) return;
-        await cb(info.senderPubKey);
-      },
-    );
-  }
+  private listenForAnnouncements() {
+    this.on("message", async (data: Uint8Array) => {
+      let info = this.getInfoFromPacket(data);
+      if (info.type !== ShelterPacketType.ANNOUNCE) return;
+      const pubKey = info.senderPubKey;
 
-  encrypt(msgBytes: Uint8Array, destPubKey: Uint8Array) {
-    const nonce = nacl.randomBytes(24);
-    const mySecretKey = ShelterUtils.fromHex(this.data.get()!.secretKey);
+      let senderHex = ShelterUtils.toHex(pubKey);
+      this.logger.log(`Received announcement from ${senderHex}`);
 
-    const encrypted = nacl.box(msgBytes, nonce, destPubKey, mySecretKey);
+      // Save to annuary
+      let annuary = this.getAllKnownIds();
 
-    return { nonce, encrypted };
-  }
+      const idHex = ShelterUtils.toHex(blake3(pubKey));
 
-  build(
-    type: ShelterPacketType,
-    message?: Uint8Array,
-    targetKey?: Uint8Array,
-    hashTarget: boolean = true,
-  ): Uint8Array {
-    const myData = this.data.get();
-    const myPubKey = ShelterUtils.fromHex(myData!.publicKey);
-    const sID = blake3(myPubKey);
-
-    if (type === ShelterPacketType.ANNOUNCE) {
-      const totalSize = 5 + sID.length + myPubKey.length; // 4 + 1 + 32 + 32 = 69
-      const packet = new Uint8Array(totalSize);
-
-      packet.set(Buffer.from(this._intrinsic.MAGIC), 0);
-      packet[4] = type;
-      packet.set(sID, 5);
-      packet.set(myPubKey, 5 + sID.length); // Utilise la longueur dynamique
-
-      return packet;
-    }
-
-    if (type === ShelterPacketType.MESSAGE && message && targetKey) {
-      const { encrypted, nonce } = this.encrypt(message, targetKey);
-      const dID = blake3(targetKey);
-
-      // Magic(4) + Type(1) + sID(32) + dID(32) + Nonce(24) + Data(n)
-      const packet = new Uint8Array(93 + encrypted.length);
-      packet.set(Buffer.from(this._intrinsic.MAGIC), 0);
-      packet[4] = type;
-      packet.set(sID, 5);
-      packet.set(dID, 37);
-      packet.set(nonce, 69);
-      packet.set(encrypted, 93);
-      return packet;
-    }
-
-    if (type === ShelterPacketType.SEEK && targetKey) {
-      const dID = hashTarget ? blake3(targetKey) : targetKey;
-
-      // Magic(4) + Type(1) + sID(32) + dID(32)
-      const packet = new Uint8Array(69);
-      packet.set(Buffer.from(this._intrinsic.MAGIC), 0);
-      packet[4] = type;
-      packet.set(sID, 5);
-      packet.set(dID, 37);
-      return packet;
-    }
-
-    if (type === ShelterPacketType.SEEK_BACK && targetKey) {
-      const dID = hashTarget ? blake3(targetKey) : targetKey;
-
-      // Magic(4) + Type(1) + sID(32) + dID(32)
-      const packet = new Uint8Array(69);
-      packet.set(Buffer.from(this._intrinsic.MAGIC), 0);
-      packet[4] = type;
-      packet.set(sID, 5);
-      packet.set(dID, 37);
-      return packet;
-    }
-    throw new Error("Invalid packet build parameters");
+      annuary[idHex] = ShelterUtils.toHex(pubKey);
+      ShelterUtils.write(this.annuaryPath, annuary);
+    });
   }
 
   async init() {
@@ -201,67 +132,69 @@ export default class ShelterClient extends EventEmitter.EventEmitter {
       this.data.set(data);
     }
 
-    this.emit("ready");
+    this.emit("ready", this);
+  }
 
+  listenForSeeks() {
     this.on("message", (data: Uint8Array, port: number, address: string) => {
       let info = this.getInfoFromPacket(data);
 
       if (info.type !== ShelterPacketType.SEEK) return;
 
-      let { targetIdHash, myIdHash, senderIdHash } = info;
+      let { targetPubKey, myPkHash } = info;
 
-      if (Buffer.from(targetIdHash).equals(Buffer.from(myIdHash))) {
-        const seekBack = this.build(
-          ShelterPacketType.SEEK_BACK,
-          undefined,
-          senderIdHash,
-          false,
-        );
+      let senderPkHex = this.getPublicKey(info.senderPkHex)!;
 
-        this.socket.send(seekBack, port, address);
+      this.logger.log(`Received SEEK from __redacted-ip__ (${senderPkHex}).`);
 
-        const targetPubKeyHex = this.getPkByIdHash(
-          ShelterUtils.toHex(senderIdHash),
-        )!;
+      if (Buffer.from(targetPubKey).equals(Buffer.from(myPkHash))) {
+        this.emit("call", senderPkHex, () => {
+          // Accept callback executed, send SEEK_BACK
+
+          const packet = ShelterUtils.createSeekBackPacket({ client: this });
+
+          this.socket.send(packet, port, address);
+
+          this.logger.log(
+            `Responded to SEEK from __redacted-ip__ (${info.senderPkHex}).`,
+          );
+        });
+
+        /* this.socket.send(packet, port, address);
 
         this.logger.log(
-          `Handshake initiated with __redacted-ip__ (${targetPubKeyHex}).`,
-        );
+          `Handshake initiated with __redacted-ip__ (${ShelterUtils.toHex(targetIdHash)}).`,
+        );*/
       }
     });
   }
 
   getInfoFromPacket(packet: Uint8Array): {
-    targetIdHash: Uint8Array;
-    senderIdHash: Uint8Array;
+    targetPubKey: Uint8Array;
     senderPubKey: Uint8Array;
     myPubKey: Uint8Array;
-    myIdHash: Uint8Array;
-    senderIdHashHex: string;
+    myPkHash: Uint8Array;
+    senderPkHex: string;
     type: ShelterPacketType;
     nonce: Uint8Array;
     encryptedData?: Uint8Array;
   } {
     let x = {
+      targetPubKey: packet.slice(37, 69),
+      senderPubKey: packet.slice(5, 37),
+      myPubKey: ShelterUtils.fromHex(this.publicKey),
+      myPkHash: blake3(ShelterUtils.fromHex(this.publicKey)),
+      senderPkHex: ShelterUtils.toHex(packet.slice(5, 37)),
       type: packet[4] as ShelterPacketType,
-      senderIdHash: packet.slice(5, 37),
-      targetIdHash: packet.slice(37, 69),
-      myPubKey: ShelterUtils.fromHex(this.data.get()!.publicKey),
       nonce: packet.slice(69, 93),
       encryptedData: packet.slice(93),
-    } as unknown as ReturnType<ShelterClient["getInfoFromPacket"]>;
-
-    x.myIdHash = blake3(x.myPubKey);
-    x.senderIdHashHex = ShelterUtils.toHex(x.senderIdHash);
-    x.senderPubKey = ShelterUtils.fromHex(
-      this.getPkByIdHash(x.senderIdHashHex)!,
-    );
+    };
 
     return x;
   }
 
   announce() {
-    const packet = this.build(ShelterPacketType.ANNOUNCE);
+    const packet = ShelterUtils.createAnnouncePacket({ client: this });
     let isSent = this.socket.send(packet, this.PORT, "255.255.255.255");
 
     if (!isSent) {
@@ -272,9 +205,18 @@ export default class ShelterClient extends EventEmitter.EventEmitter {
     this.logger.log("Sent announce packet to Shelter Network");
   }
 
-  seekFor(targetPubKeyHex: string) {
-    const targetPubKey = ShelterUtils.fromHex(targetPubKeyHex);
-    const packet = this.build(ShelterPacketType.SEEK, undefined, targetPubKey);
+  /**
+   * Broadcast a seek packet to find a client by its public key hash.
+   * @param targetPkHash
+   * @returns
+   */
+
+  seek(targetPkHex: string) {
+    const packet = ShelterUtils.createSeekPacket({
+      client: this,
+      targetPk: ShelterUtils.fromHex(targetPkHex),
+    });
+
     let isSent = this.socket.send(packet, this.PORT, "255.255.255.255");
 
     if (!isSent) {
@@ -291,59 +233,51 @@ export default class ShelterClient extends EventEmitter.EventEmitter {
         const knownIds = this.getAllKnownIds();
         const targetIdHex = ShelterUtils.toHex(targetIdHash);
 
-        const targetPubKeyHex = knownIds[targetIdHex]!.publicKey;
+        const targetPubKeyHex = knownIds[targetIdHex]!;
         const targetPubKey = ShelterUtils.fromHex(targetPubKeyHex);
 
-        const packet = this.build(
-          ShelterPacketType.MESSAGE,
-          Uint8Array.from(new TextEncoder().encode(message)),
-          targetPubKey,
-        );
-
+        const packet = ShelterUtils.createMessagePacket({
+          message: Uint8Array.from(new TextEncoder().encode(message)),
+          client: this,
+          targetPk: targetPubKey,
+        });
         this.socket.send(packet, port, address);
         this.logger.log(
-          `Encrypted message sent to __redacted-ip__ (${ShelterUtils.toHex(targetPubKey)}).`,
+          `Encrypted message sent to __redacted-ip__ (${targetPubKeyHex}).`,
         );
       },
       onMessage: (cb: (msg: string, senderPubKey: Uint8Array) => void) => {
-        this.on("chat", (msg: string, senderPubKeyHash: string) => {
-          cb(msg, ShelterUtils.fromHex(senderPubKeyHash));
+        this.on("text", (senderPkHex: string, msg: string) => {
+          cb(msg, ShelterUtils.fromHex(senderPkHex));
         });
       },
     };
   }
 
-  onHandshake(
-    cb: (
-      senderPubKey: Uint8Array,
-      accept: () => ReturnType<typeof this.createConversation>,
-    ) => void | Promise<void>,
-  ) {
+  listenForSeekResponse() {
     this.on(
       "message",
       async (data: Uint8Array, port: number, address: string) => {
-        let info = this.getInfoFromPacket(data);
+        const info = this.getInfoFromPacket(data);
         if (info.type !== ShelterPacketType.SEEK_BACK) return;
 
-        const { targetIdHash, myIdHash, senderPubKey } = info;
+        const { targetPubKey, senderPubKey, myPubKey } = info;
 
-        if (Buffer.from(targetIdHash).equals(Buffer.from(myIdHash))) {
-          const senderPkHex = ShelterUtils.toHex(senderPubKey);
+        // A seek response has no target since it's unicasting back to us
 
-          this.logger.log(
-            `Handshake received from __redacted-ip__ (${senderPkHex!}). You can now communicate.`,
-          );
+        console.log(targetPubKey.toHex(), myPubKey.toHex());
 
-          await cb(info.senderPubKey, () =>
-            this.createConversation(port, address, info.senderIdHash),
-          );
-        }
+        const senderPkHex = ShelterUtils.toHex(senderPubKey);
+
+        this.logger.log(
+          `Client responded: SEEK_BACK message from __redacted-ip__ (${senderPkHex}).`,
+        );
+
+        this.emit("link", senderPkHex, () => {
+          return this.createConversation(port, address, senderPubKey);
+        });
       },
     );
-  }
-
-  onReady(callback: () => void | Promise<void>) {
-    this.on("ready", callback);
   }
 
   stop() {
@@ -355,7 +289,7 @@ export default class ShelterClient extends EventEmitter.EventEmitter {
 
     let { senderPubKey, encryptedData, nonce } = info;
 
-    const mySecretKey = ShelterUtils.fromHex(this.data.get()!.secretKey);
+    const mySecretKey = ShelterUtils.fromHex(this.secretKey);
 
     // 2. Ouvrir la boîte
     const decrypted = nacl.box.open(
@@ -373,18 +307,23 @@ export default class ShelterClient extends EventEmitter.EventEmitter {
     return new TextDecoder().decode(decrypted);
   }
 
-  getPkByIdHash(idHash: string): string | null {
+  getPublicKey(pkHash: string): string | null {
     let annuary = this.getAllKnownIds();
 
-    const pubKeyHex = annuary[idHash]?.publicKey;
-    if (!pubKeyHex) {
-      return null;
+    // Hash is value
+
+    const keys = Object.keys(annuary);
+
+    for (let key of keys) {
+      if (annuary[key] === pkHash) {
+        return key;
+      }
     }
 
-    return pubKeyHex;
+    return null;
   }
 
-  getAllKnownIds(): { [key: string]: { publicKey: string } } {
+  getAllKnownIds(): { [key: string]: string } {
     let annuary: any = {};
     try {
       annuary = JSON.parse(readFileSync(this.annuaryPath, "utf-8"));

@@ -1,10 +1,11 @@
+import { blake3 } from "@noble/hashes/blake3.js";
 import ShelterClient from "../src/ShelterClient";
 import { ShelterUtils } from "../src/ShelterUtils";
 import { TerminalUI } from "./TerminalUI";
 
 const activeConversations = new Set<any>();
 
-const client = new ShelterClient();
+const client = new ShelterClient({ debug: true });
 
 const ui = new TerminalUI((line) => {
   // This runs when you press Enter
@@ -13,13 +14,25 @@ const ui = new TerminalUI((line) => {
   }
 });
 
-client.onReady(() => {
+client.on("ready", () => {
   ui.log("LOG: Shelter Client is ready.");
 
-  client.seekFor(ShelterUtils.toUint8(client.data.get().publicKey)); // target ourself for now
+  console.log(client.publicKey);
 
-  client.onHandshake(async (sender, accept) => {
-    const conversation = accept();
+  /**
+   * Announce ourselves to the Shelter Network
+   * Always ask for a hashed public key when trying to connect to someone
+   */
+  client.seek(client.publicKey);
+
+  client.on("call", (sender, accept) => {
+    ui.log(`Incoming call from ${sender}`);
+    // Someones shouted a SEEK packet that targets us
+    accept();
+  });
+
+  client.on("link", (conversation) => {
+    ui.log(`LOG: Linked with ${conversation}`);
     activeConversations.add(conversation);
   });
 });

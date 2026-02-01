@@ -16,6 +16,6 @@
   },
   "scripts": {
     "start": "bun run ./src/index.ts",
-    "build":"bun build --target bun --minify ./src/index.ts --outfile ./dist/bundle.js"
+    "build": "bun build --target bun --minify ./src/index.ts --outfile ./dist/bundle.js"
   }
 }

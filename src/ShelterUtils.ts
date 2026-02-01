@@ -1,8 +1,23 @@
+import { readFileSync, writeFileSync } from "fs";
+
 export class ShelterUtils {
-  static toUint8(data: any): Uint8Array {
-    if (data instanceof Uint8Array) return data;
-    if (typeof data === "string")
-      return new Uint8Array(data.split(",").map(Number));
-    return Uint8Array.from(Object.values(data));
+  static toHex(uint8array: Uint8Array): string {
+    return Buffer.from(uint8array).toHex();
+  }
+
+  static fromHex(hexString: string) {
+    return Buffer.from(hexString, "hex");
+  }
+
+  static read<T>(path: string): T | null {
+    try {
+      return JSON.parse(readFileSync(path, "utf-8")) as T;
+    } catch {
+      return null;
+    }
+  }
+
+  static write<T>(path: string, data: T): void {
+    writeFileSync(path, JSON.stringify(data, null, 2), "utf-8");
   }
 }

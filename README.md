@@ -77,6 +77,9 @@ bun run ./app/main.ts
 
 - [x] Core Protocol Design
 - [x] Working Networking Prototype (to send data between two peers or broadcast)
+- [x] Make it reliable and fast (retransmissions, ordering, etc.)
+- [x] Encryption & Decryption of messages
+- [x] Peer Discovery (SEEK / SEEK_BACK)
 - [ ] Local Petname System
 - [ ] Translate code into Rust, Haxe or Zen-C (when possible)
 - [ ] Reporting Bad Actors

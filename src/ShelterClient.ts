@@ -76,7 +76,7 @@ export default class ShelterClient extends EventEmitter.EventEmitter {
 
         // Stocke les deux !
         annuary[idHex] = {
-          publicKey: Array.from(pubKey), // Facile à relire pour toUint8
+          publicKey: Buffer.from(pubKey).toString("hex"),
           lastSeen: new Date().toISOString(),
         };
 
@@ -113,7 +113,7 @@ export default class ShelterClient extends EventEmitter.EventEmitter {
 
   encrypt(msgBytes: Uint8Array, destPubKey: Uint8Array) {
     const nonce = nacl.randomBytes(24);
-    const mySecretKey = ShelterUtils.toUint8(this.data.get().secretKey); // Ensure this is Uint8Array
+    const mySecretKey = Buffer.from(this.data.get().secretKey, "hex");
 
     const encrypted = nacl.box(msgBytes, nonce, destPubKey, mySecretKey);
 
@@ -127,7 +127,7 @@ export default class ShelterClient extends EventEmitter.EventEmitter {
     hashTarget: boolean = true,
   ): Uint8Array {
     const myData = this.data.get();
-    const myPubKey = ShelterUtils.toUint8(myData.publicKey);
+    const myPubKey = Buffer.from(myData.publicKey, "hex");
     const sID = blake3(myPubKey);
 
     if (type === ShelterPacketType.ANNOUNCE) {
@@ -207,8 +207,8 @@ export default class ShelterClient extends EventEmitter.EventEmitter {
       const keyPair = nacl.box.keyPair();
 
       data = {
-        publicKey: keyPair.publicKey.toString(),
-        secretKey: keyPair.secretKey.toString(),
+        publicKey: Buffer.from(keyPair.publicKey).toHex(),
+        secretKey: Buffer.from(keyPair.secretKey).toHex(),
       };
 
       this.data.set(data);
@@ -220,11 +220,10 @@ export default class ShelterClient extends EventEmitter.EventEmitter {
       if (data[4] !== ShelterPacketType.SEEK) return;
 
       const targetIdHash = data.slice(37, 69);
-      const myPubKey = ShelterUtils.toUint8(this.data.get().publicKey);
+      const myPubKey = Buffer.from(this.data.get().publicKey, "hex");
       const myIdHash = blake3(myPubKey);
 
       if (Buffer.from(targetIdHash).equals(Buffer.from(myIdHash))) {
-        // On récupère la PK de celui qui nous cherche (offset 5-37)
         const senderIdHash = data.slice(5, 37);
 
         const seekBack = this.build(
@@ -236,8 +235,11 @@ export default class ShelterClient extends EventEmitter.EventEmitter {
 
         this.socket.send(seekBack, port, address);
 
+        let d = this.data.get();
+        let targetPubKey = Buffer.from(d.publicKey, "hex");
+
         this.logger.log(
-          `Handshake initiated with __redacted-ip__ (${new TextDecoder("utf-8").decode(targetIdHash)})`,
+          `Handshake initiated with __redacted-ip__ (${Buffer.from(targetPubKey).toString("hex")}).`,
         );
       }
     });
@@ -275,13 +277,12 @@ export default class ShelterClient extends EventEmitter.EventEmitter {
         const sidHex = Buffer.from(targetIdHash).toString("hex");
 
         // On récupère la vraie clé publique dans l'annuaire
-        const targetPubKey = ShelterUtils.toUint8(annuary[sidHex].publicKey);
+        const targetPubKey = Buffer.from(annuary[sidHex].publicKey, "hex");
 
         const packet = this.build(
           ShelterPacketType.MESSAGE,
           Uint8Array.from(new TextEncoder().encode(message)),
           targetPubKey,
-          false,
         );
 
         this.socket.send(packet, port, address);
@@ -309,15 +310,17 @@ export default class ShelterClient extends EventEmitter.EventEmitter {
         if (data[4] !== ShelterPacketType.SEEK_BACK) return;
 
         const targetIdHash = data.slice(37, 69);
-        const myPubKey = ShelterUtils.toUint8(this.data.get().publicKey);
+        const myPubKey = Buffer.from(this.data.get().publicKey, "hex");
         const myIdHash = blake3(myPubKey);
 
         if (Buffer.from(targetIdHash).equals(Buffer.from(myIdHash))) {
-          // On récupère la PK de celui qui nous a cherché (offset 5-37)
           const senderIdHash = data.slice(5, 37);
 
+          let d = this.data.get();
+          let targetPubKey = Buffer.from(d.publicKey, "hex");
+
           this.logger.log(
-            `Handshake received from __redacted-ip__ (${new TextDecoder("utf-8").decode(targetIdHash)}). You can now communicate.`,
+            `Handshake received from __redacted-ip__ (${Buffer.from(targetPubKey).toString("hex")}). You can now communicate.`,
           );
 
           await cb(senderIdHash, () =>
@@ -353,10 +356,10 @@ export default class ShelterClient extends EventEmitter.EventEmitter {
       return null;
     }
 
-    const senderPubKey = ShelterUtils.toUint8(senderPubKeyRaw);
+    const senderPubKey = Buffer.from(senderPubKeyRaw, "hex");
     const nonce = packet.slice(69, 93);
     const encryptedData = packet.slice(93);
-    const mySecretKey = ShelterUtils.toUint8(this.data.get().secretKey);
+    const mySecretKey = Buffer.from(this.data.get().secretKey, "hex");
 
     // 2. Ouvrir la boîte
     const decrypted = nacl.box.open(

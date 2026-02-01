@@ -31,8 +31,9 @@ client.on("ready", () => {
     accept();
   });
 
-  client.on("link", (conversation) => {
-    ui.log(`LOG: Linked with ${conversation}`);
-    activeConversations.add(conversation);
+  client.on("link", (sender, accept) => {
+    const conv = accept();
+    ui.log(`LOG: Linked with ${sender}`);
+    activeConversations.add(conv);
   });
 });

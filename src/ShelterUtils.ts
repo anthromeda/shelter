@@ -29,8 +29,15 @@ export class ShelterUtils {
     secretKey: Uint8Array,
     msgBytes: Uint8Array,
     destPubKey: Uint8Array,
+    client: ShelterClient,
   ) {
     const nonce = nacl.randomBytes(24);
+
+    // DestPubKey is hash!!! Get real pubkey before using
+
+    // let clearPubKey = client.getPublicKey(ShelterUtils.toHex(destPubKey))!;
+    // const destPubKeyBytes = ShelterUtils.fromHex(clearPubKey);
+
     const encrypted = nacl.box(msgBytes, nonce, destPubKey, secretKey);
 
     return { nonce, encrypted };
@@ -39,27 +46,28 @@ export class ShelterUtils {
   static createMessagePacket(options: {
     message: Uint8Array;
     client: ShelterClient;
-    targetPk: Uint8Array;
+    targetPkHash: Uint8Array;
     doHash?: boolean;
   }): Uint8Array {
-    const { message, client, targetPk, doHash } = options;
+    const { message, client, targetPkHash } = options;
+
+    const targetPk = client.getPublicKey(ShelterUtils.toHex(targetPkHash));
 
     const { encrypted, nonce } = this.encrypt(
       ShelterUtils.fromHex(client.secretKey),
       message,
-      targetPk,
+      ShelterUtils.fromHex(targetPk!),
+      client,
     );
-    const dID = doHash ? blake3(targetPk) : targetPk;
 
     const myPubKey = ShelterUtils.fromHex(client.publicKey);
-    const sID = blake3(myPubKey);
 
     // Magic(4) + Type(1) + sID(32) + dID(32) + Nonce(24) + Data(n)
     const packet = new Uint8Array(93 + encrypted.length);
     packet.set(Buffer.from(client.intrinsic.MAGIC), 0);
     packet[4] = ShelterPacketType.MESSAGE;
-    packet.set(sID, 5);
-    packet.set(dID, 37);
+    packet.set(myPubKey, 5);
+    packet.set(targetPkHash, 37);
     packet.set(nonce, 69);
     packet.set(encrypted, 93);
     return packet;

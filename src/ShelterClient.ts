@@ -114,6 +114,7 @@ export default class ShelterClient extends EventEmitter.EventEmitter<ShelterClie
     this.socket = await udpSocket({
       port: this.PORT,
       binaryType: "uint8array",
+      hostname: "::", // ipv6 makes the client expose to global internet
       socket: {
         data: (_, data, port, address) => {
           this.emit("message", data, port, address);

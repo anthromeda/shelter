@@ -4,6 +4,9 @@ export class TerminalUI {
   private currentInput: string = "";
   private prompt: string = "> ";
 
+  /**
+   * Initialize TerminalUI and set up input listener
+   */
   constructor(private onLineEntered: (line: string) => void) {
     process.stdin.setRawMode(true);
     process.stdin.resume();
@@ -11,17 +14,25 @@ export class TerminalUI {
     this.listen();
   }
 
-  // Use this instead of console.log
+  /**
+   * Print a message to the terminal and redraw prompt
+   */
   public log(message: string) {
     // \r moves cursor to start, \x1b[K clears the line
     process.stdout.write(`\r\x1b[K${message}\n`);
     this.drawPrompt();
   }
 
+  /**
+   * Draw the input prompt with current input
+   */
   private drawPrompt() {
     process.stdout.write(`\r\x1b[K${this.prompt}${this.currentInput}`);
   }
 
+  /**
+   * Listen for keyboard input and handle line entry, backspace, and exit
+   */
   private async listen() {
     if (isListening) return; // Prevent multiple loops
     isListening = true;

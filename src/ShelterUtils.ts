@@ -5,14 +5,23 @@ import { ShelterPacketType } from "./ShelterPacketType";
 import nacl from "tweetnacl";
 
 export class ShelterUtils {
+  /**
+   * Convert Uint8Array to hex string
+   */
   static toHex(uint8array: Uint8Array): string {
     return Buffer.from(uint8array).toString("hex");
   }
 
+  /**
+   * Convert hex string to Uint8Array
+   */
   static fromHex(hexString: string) {
     return Buffer.from(hexString, "hex");
   }
 
+  /**
+   * Read and parse JSON file, return null if not found
+   */
   static read<T>(path: string): T | null {
     try {
       return JSON.parse(readFileSync(path, "utf-8")) as T;
@@ -21,11 +30,17 @@ export class ShelterUtils {
     }
   }
 
+  /**
+   * Write data as JSON to file
+   */
   static write<T>(path: string, data: T): void {
     writeFileSync(path, JSON.stringify(data, null, 2), "utf-8");
   }
 
-  private static encrypt(
+  /**
+   * Encrypt a message for a destination public key
+   */
+  public static encrypt(
     secretKey: Uint8Array,
     msgBytes: Uint8Array,
     destPubKey: Uint8Array,
@@ -43,6 +58,9 @@ export class ShelterUtils {
     return { nonce, encrypted };
   }
 
+  /**
+   * Create a message packet for sending encrypted messages
+   */
   static createMessagePacket(options: {
     message: Uint8Array;
     client: ShelterClient;
@@ -73,6 +91,9 @@ export class ShelterUtils {
     return packet;
   }
 
+  /**
+   * Create an announce packet for broadcasting presence
+   */
   static createAnnouncePacket(options: { client: ShelterClient }): Uint8Array {
     const { client } = options;
 
@@ -89,6 +110,9 @@ export class ShelterUtils {
     return packet;
   }
 
+  /**
+   * Create a seek packet to find a client by public key
+   */
   static createSeekPacket(options: {
     client: ShelterClient;
     targetPk: Uint8Array;
@@ -110,6 +134,9 @@ export class ShelterUtils {
   }
 
   // Packet, containing clear sender public key for unicast message
+  /**
+   * Create a seek-back packet for unicast response
+   */
   static createSeekBackPacket(options: { client: ShelterClient }): Uint8Array {
     const { client } = options;
 

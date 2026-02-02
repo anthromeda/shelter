@@ -36,6 +36,8 @@ sequenceDiagram
 
 # Try
 
+## With Bun
+
 - Cloning the repo:
 
 ```bash
@@ -60,6 +62,10 @@ bun install
 ```bash
 bun run ./app/main.ts
 ```
+
+## Standalone Daemon & CLI
+
+Pre-built binaries are available in the [Releases](https://github.com/anthromeda/shelter/releases)
 
 # Features
 
@@ -89,6 +95,12 @@ bun run ./app/main.ts
 - [ ] Profile System: a public key for each profile, but linked to the parent public key.
 - [ ] High-level Language Bridges (JavaScript, Python, Rust, Go, etc.)
 - [ ] Documentation & Tutorials
+
+# CLI Documentation
+
+## Commands
+
+_Work in progress..._
 
 # Contributing
 

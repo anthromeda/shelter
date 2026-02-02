@@ -1,8 +1,5 @@
 ![Shelter Logo](./docs/Shelter%20Github%20Banner.png)
 
-_Note : This project is in early development. Some API features can change before stable release.
-Also, the project is open to contributions and suggestions. Feel free to open issues or pull requests!_
-
 # Stacks
 
 - Uses Blake3 for hashing (via @noble/hashes).
@@ -36,7 +33,7 @@ sequenceDiagram
 
 # Try
 
-## With Bun
+## From Source, With Bun
 
 - Cloning the repo:
 
@@ -48,7 +45,11 @@ cd shelter
 Install Bun (if not already installed):
 
 ```bash
-curl -fsSL https://bun.sh/install | bash
+# Linux / macOS
+$ curl -fsSL https://bun.sh/install | bash
+
+# Windows (via PowerShell)
+$ powershell -c "irm bun.sh/install.ps1 | iex"
 ```
 
 - Install dependencies:
@@ -57,10 +58,14 @@ curl -fsSL https://bun.sh/install | bash
 bun install
 ```
 
-- Run the example app:
+```bash
+bun run ./apps/shelter-daemon.ts
+```
+
+- In another terminal, run the CLI:
 
 ```bash
-bun run ./app/main.ts
+bun run ./apps/shelter-cli.ts help
 ```
 
 ## Standalone Daemon & CLI
@@ -72,29 +77,13 @@ Pre-built binaries are available in the [Releases](https://github.com/anthromeda
 - Secure by default: only the packet receiver can decrypt the data.
 - Peer-to-peer: no central servers required.
 - Low latency: built on top of UDP for fast data transmission.
-- High-level language bridges.
-- Support to co-exist with the existing internet infrastructure (HTTP/S, WebSockets, etc.).
-
-# The Promises
-
-- **Shelter** isn't hosted, you host it.
-- **Shelter** isn't owned, you own it.
-- **Shelter** isn't monitored, you are private.
-- **Shelter** isn't centralized, you are in control.
 
 # Roadmap
 
-- [x] Core Protocol Design
 - [x] Working Networking Prototype (to send data between two peers or broadcast)
-- [ ] Make it reliable and fast (retransmissions, ordering, etc.)
 - [x] Encryption & Decryption of messages
 - [x] Peer Discovery (SEEK / SEEK_BACK)
 - [ ] Local Petname System
-- [ ] Translate code into Rust, Haxe or Zen-C (when possible)
-- [ ] Reporting Bad Actors
-- [ ] Profile System: a public key for each profile, but linked to the parent public key.
-- [ ] High-level Language Bridges (JavaScript, Python, Rust, Go, etc.)
-- [ ] Documentation & Tutorials
 
 # CLI Documentation
 

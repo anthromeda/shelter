@@ -169,7 +169,7 @@ export default class ShelterClient extends EventEmitter.EventEmitter<ShelterClie
 
           const p = ShelterPacket.build(69)
             .setType(ShelterPacketType.SEEK_BACK)
-            .setSender(this.hashKey)
+            .setSender(ShelterUtils.fromHex(this.publicKey))
             .setTarget(packet.getSender())
             .build();
 
@@ -208,12 +208,6 @@ export default class ShelterClient extends EventEmitter.EventEmitter<ShelterClie
 
     this.logger.log("Sent announce packet to Shelter Network");
   }
-
-  /**
-   * Broadcast a seek packet to find a client by its public key hash.
-   * @param targetPkHash
-   * @returns
-   */
 
   /**
    * Broadcast a seek packet to find a client by public key hash
@@ -333,13 +327,13 @@ export default class ShelterClient extends EventEmitter.EventEmitter<ShelterClie
 
     let { sender, encryptedMessage, nonce } = info;
 
-    const secretKeyHex = ShelterUtils.fromHex(this.secretKey);
+    const secretKey = ShelterUtils.fromHex(this.secretKey);
 
     const decrypted = nacl.box.open(
       encryptedMessage!,
       nonce!,
-      ShelterUtils.fromHex(shelterPacket.getClearKey(this.getAllKnownIds())!),
-      secretKeyHex,
+      sender,
+      secretKey,
     );
 
     if (!decrypted) {
@@ -380,5 +374,138 @@ export default class ShelterClient extends EventEmitter.EventEmitter<ShelterClie
     }
 
     return annuary;
+  }
+
+  async exposeDaemonApi(clientPort: number = 4446) {
+    const calls = new Map<string, () => void>();
+    const conversations = new Map<string, any>();
+
+    const messages = new Set<{
+      time: number;
+      message: string;
+      author: string;
+      channel: string; // Channel is target public key hash
+    }>();
+
+    this.on("call", (targetHash, accept) => {
+      if (calls.has(targetHash)) return; // already incoming call
+      calls.set(targetHash, accept);
+    });
+
+    this.on("link", (targetHash, accept) => {
+      if (conversations.has(targetHash)) return; // already linked
+      const conv = accept();
+      conversations.set(targetHash, conv);
+    });
+
+    this.on("text", (senderHash, msg) => {
+      messages.add({
+        time: Date.now(),
+        message: msg,
+        author: senderHash,
+        channel: senderHash,
+      });
+    });
+
+    const daemon = await Bun.udpSocket({
+      port: 4445,
+      binaryType: "uint8array",
+      socket: {
+        data: (socket, data, _, address) => {
+          const command = new TextDecoder().decode(data).trim();
+
+          const args = command.split(" ");
+          const commandName = args[0];
+
+          if (commandName === "getPublicKey") {
+            const response = blake3(ShelterUtils.fromHex(this.publicKey));
+            daemon.send(response, clientPort, address);
+          }
+
+          if (commandName === "annuary") {
+            const annuary = this.getAllKnownIds();
+            const response = new TextEncoder().encode(JSON.stringify(annuary));
+            daemon.send(response, clientPort, address);
+          }
+
+          if (commandName === "seek") {
+            const targetHash = args[1];
+            if (!targetHash) return;
+            this.seek(targetHash!);
+            daemon.send(
+              new TextEncoder().encode(`Seeking ${targetHash}`),
+              clientPort,
+              address,
+            );
+          }
+
+          if (commandName === "accept") {
+            const targetHash = args[1];
+            if (!targetHash) return;
+
+            if (calls.has(targetHash)) {
+              const accept = calls.get(targetHash)!;
+              accept();
+              calls.delete(targetHash);
+              daemon.send(
+                new TextEncoder().encode(`Accepted call from ${targetHash}`),
+                clientPort,
+                address,
+              );
+            }
+          }
+
+          if (commandName === "send") {
+            const targetHash = args[1];
+            const message = args.slice(2).join(" ");
+            if (!targetHash || !message) return;
+
+            if (conversations.has(targetHash)) {
+              const conv = conversations.get(targetHash);
+              conv.send(message);
+
+              // Tendency to store messages twice, both on sender and receiver
+
+              if (
+                messages
+                  .values()
+                  .toArray()
+                  .find(
+                    (m) =>
+                      m.message === message &&
+                      m.channel === targetHash &&
+                      m.author === this.hashKeyHex,
+                  )
+              )
+                return;
+
+              messages.add({
+                time: Date.now(),
+                message: message,
+                author: this.hashKeyHex,
+                channel: targetHash,
+              });
+
+              daemon.send(
+                new TextEncoder().encode(
+                  `Sent message to ${targetHash}: ${message}`,
+                ),
+                clientPort,
+                address,
+              );
+            }
+          }
+
+          if (commandName === "messages") {
+            const response = new TextEncoder().encode(
+              JSON.stringify(Array.from(messages)),
+            );
+            daemon.send(response, clientPort, address);
+          }
+        },
+      },
+    });
+
+    return daemon;
   }
 }

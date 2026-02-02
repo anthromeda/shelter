@@ -20,7 +20,11 @@
 
   "scripts": {
     "start": "bun run ./src/index.ts",
-    "build": "bun build --target bun --minify ./src/index.ts --outfile ./dist/bundle.js",
+    "build:js": "bun build --target bun --minify ./src/index.ts --outfile ./dist/bundle.js",
+    "build:daemon": "bun build --compile --outfile=./dist/shelter-daemon ./apps/daemon.ts",
+    "build:daemon:windows": "bun build --compile --platform=windows --outfile=./dist/shelter-daemon.exe ./apps/daemon.ts",
+    "build:cli": "bun build --compile --outfile=./dist/shelter-cli ./apps/cli.ts",
+    "build:cli:windows": "bun build --compile --platform=windows --outfile=./dist/shelter-cli.exe ./apps/cli.ts",
     "test": "bun run vitest"
   }
 }
